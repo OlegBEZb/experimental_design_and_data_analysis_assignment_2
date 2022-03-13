@@ -1,0 +1,145 @@
+---
+title: "Assignment 1"
+author: "Oguzhan Yetkin, Oleg Litvinov, Victor Retamal, group 4"
+date: "15 March 2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+highlight: tango
+fontsize: 11pt
+editor_options: 
+  chunk_output_type: inline
+  markdown: 
+    wrap: 72
+---
+
+## Exercise 2. Airpollution.
+
+The data were obtained to determine predictors related to air pollution. We want to investigate which explanatory variables need to be included into a linear regression model with oxidant as the response variable.
+
+```{r}
+pollution_df <- read.table("data/airpollution.txt", header=TRUE)
+head(pollution_df)
+```
+
+
+### a)  Make some graphical summaries of the data. Investigate the problem of potential and influence points, and the problem of collinearity.
+
+```{r}
+# cor(pollution_df, method = c("spearman"))
+if (!require("corrplot")) install.packages("corrplot")
+library(corrplot)
+par(mfrow=c(2, 1))
+res <- cor(pollution_df, method='kendall')
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+pairs(pollution_df, pch = 19)
+```
+```{r}
+if (!require("psych")) install.packages("psych")
+library(psych)
+pairs.panels(pollution_df, 
+             method = "spearman", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             )
+```
+
+
+### b)  Use the added variable plot to depict the relationship between response oxidant and predictor wind. What is the meaning of the slope of fitted regression for this scatter plot?
+
+```{r}
+if (!require("car")) install.packages("car")
+library(car)
+
+attach(pollution_df)
+mod = lm(oxidant~insolation+humidity+wind)
+par(mfrow=c(2, 1))
+avPlots(mod)
+summary(mod)
+```
+The slopes on the plots reflect the regression coefficients from the original miltiple regression model mod. 
+```{r}
+attach(pollution_df)
+y = residuals(lm(oxidant~insolation+humidity))
+x = residuals(lm(wind~insolation+humidity))
+plot(x, y, xlab='residual of wind', ylab='residual of oxidant')
+```
+
+### c)  Fit a linear regression model to the data. Use both the step-up and step-down methods to find the best model. If step-up and step-down yield two different models, choose one and motivate your choice. 
+
+#### Step-up
+
+```{r}
+
+for(i in names(pollution_df)){
+  if(i == 'oxidant'){next}
+  # summary(lm(oxidant~i))
+  print(summary(lm(paste('pollution_df$oxidant',  '~pollution_df$', i))))
+}
+```
+Wind variable gives maximum increase in the R^2. The variable is significant. Therefore, we can continue.
+
+```{r}
+for(i in names(pollution_df)){
+  if(i %in% c('oxidant', 'wind')){next}
+  print(summary(lm(paste('pollution_df$oxidant',  '~pollution_df$wind+pollution_df$', i))))
+}
+```
+Temperature variable works in the same way as the previous choice. Continue.
+
+```{r}
+for(i in names(pollution_df)){
+  if(i %in% c('oxidant', 'wind', 'temperature')){next}
+  print(summary(lm(paste('pollution_df$oxidant',  
+                         '~pollution_df$wind',
+                         '+pollution_df$temperature',
+                         '+pollution_df$', 
+                         i))))
+}
+```
+Humidity has the highest R-squared increase but the variable is not significant. Therefore, we don't add it to the model. Resulting model is:
+```{r}
+print(summary(lm(pollution_df$oxidant~pollution_df$wind+pollution_df$temperature)))
+```
+
+oxidant = -5.2 - 0.4*wind + 0.5*temperature + error, with R-squared = 0.8.
+
+#### Step-down
+
+```{r}
+summary(lm(pollution_df$oxidant~ pollution_df$wind + pollution_df$temperature + pollution_df$day + pollution_df$humidity + pollution_df$insolation))
+```
+Day has the largest p-value and the value is larger than 0.05. Removing it.
+
+```{r}
+summary(lm(pollution_df$oxidant ~ pollution_df$wind + pollution_df$temperature + pollution_df$humidity + pollution_df$insolation))
+```
+Insolation is the largers from the insignificant. Removing it.
+
+```{r}
+summary(lm(pollution_df$oxidant~ pollution_df$wind + pollution_df$temperature + pollution_df$humidity))
+```
+Humidity is the only insignificant. Removing.
+
+```{r}
+summary(lm(pollution_df$oxidant~ pollution_df$wind + pollution_df$temperature))
+```
+All remaining variables are significant. Resulting model: oxidant = -5.2 - 0.4*wind + 0.5*temperature + error, with R-squared = 0.8. The model is the same as obtained with the step-up approach.
+
+d)  Determine 95% confidence and prediction intervals for oxidant using the model you preferred in c) for wind=33, temperature=54, humidity=77 and insolation=21.
+
+```{r}
+x1 <- pollution_df$wind
+x2 <- pollution_df$temperature
+
+mod = lm(pollution_df$oxidant ~ x1 + x2)
+
+newxdata = data.frame(x1=33, x2=54)
+
+predict(mod, newxdata, interval='prediction', level=0.95)
+predict(mod, newxdata, interval='confidence', level=0.95)
+```
+
