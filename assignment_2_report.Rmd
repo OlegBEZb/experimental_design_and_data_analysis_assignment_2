@@ -96,6 +96,10 @@ corrplot(res, type = "upper", order = "hclust",
          tl.col = "black", tl.srt = 45)
 pairs(pollution_df, pch = 19)
 ```
+```{r}
+cor(pollution_df, method='kendall')
+```
+
 The command order(abs(residuals(model))) gives the indices of the ordered absolute values of residuals from smallest to largest.
 ```{r}
 pollution_lm = lm(oxidant~insolation+humidity+wind+temperature+day, data=pollution_df)
@@ -110,6 +114,10 @@ Only the 21 outlier is significant.
 
 The Cook’s distance Di quantifies the influence of observation i on the predictions:
 $D_{i}=\frac{1}{(p+1) \hat{\sigma}^{2}} \sum_{j=1}^{n}\left(\hat{Y}_{(i), j}-\hat{Y}_{j}\right)^{2}$
+
+```{r}
+max(cooks.distance(pollution_lm))
+```
 
 ```{r}
 plot(1:nrow(pollution_df), cooks.distance(pollution_lm), type="b")
@@ -208,7 +216,7 @@ summary(lm(pollution_df$oxidant~ pollution_df$wind + pollution_df$temperature))
 ```
 All remaining variables are significant. Resulting model: oxidant = -5.2 - 0.4*wind + 0.5*temperature + error, with R-squared = 0.8. The model is the same as obtained with the step-up approach.
 
-d)  Determine 95% confidence and prediction intervals for oxidant using the model you preferred in c) for wind=33, temperature=54, humidity=77 and insolation=21.
+### d)  Determine 95% confidence and prediction intervals for oxidant using the model you preferred in c) for wind=33, temperature=54, humidity=77 and insolation=21.
 
 ```{r}
 x1 <- pollution_df$wind
@@ -300,6 +308,13 @@ qqnorm(residuals(ancova_lm)); qqline(residuals(ancova_lm))
 plot(fitted(ancova_lm), residuals(ancova_lm))
 ```
 
+```{r}
+anova(lm(loglongevity ~ activity + thorax, data=flies_df))
+# anova(lm(loglongevity ~ thorax + activity, data=flies_df))
+summary(lm(loglongevity ~ thorax + activity, data=flies_df))
+```
+
+
 
 ```{r}
 ancova_lm_int = lm(loglongevity ~ activity * thorax, data=flies_df)
@@ -329,8 +344,8 @@ max_iso = 1.21893 + 0.40998 + 2.97899 * max_thorax
 min_low = 1.21893 + 0.28570 + 2.97899 * min_thorax
 max_low = 1.21893 + 0.28570 + 2.97899 * max_thorax
 
-exp(min_high); exp(max_high)
-exp(min_iso); exp(max_iso)
+exp(min_high); max_high
+min_iso; exp(max_iso)
 exp(min_low); exp(max_low)
 ```
 
@@ -349,7 +364,7 @@ Only the last p-value is relevant which always concerns interaction for models w
 
 ### d)  Which of the two analyses, without or with thorax length, do you prefer? Is one of the analyses wrong?
 
-Both analyses case to the conclusion that sexual activity influences longevity, more sex - shorter life.
+Both analyses came to the conclusion that sexual activity influences longevity, more sex - shorter life.
 
 ### e)  Perform the ancova analysis with the number of days as the response, rather than its logarithm. Was it wise to use the logarithm as response?
 
@@ -430,6 +445,10 @@ predict(psi_glm2, data.frame(psi="0", gpa=3), type="response")
 ### c)  Estimate the relative change in odds of passing the assignment rendered by instructing students with psi rather than the standard method (for an arbitrary student). What is the interpretation of this number? Is it dependent on gpa?
 
 With psi: 2.337776. 
+```{r}
+exp(-11.601565+2.337776)
+```
+
 
 ```{r}
 psi_glm3 = glm(passed ~ psi * gpa, data=psi_df, family=binomial)
@@ -456,4 +475,86 @@ Same conclusion. psi and passed are dependent.
 
 e)  Given the way the experiment was conducted, is this second approach wrong? Name both an advantage and a disadvantage of the two approaches, relative to each other.
 
-Assumption for chi-square is not met. In first we can include numeric variable
+Assumption for chi-square is not met. In first we can include numeric variable.
+
+
+## Exercise 5. School awards.
+The file contains data on the numbers of awards earned by students at one high school. Predictors of the number of awards earned include the type of program (column prog) in which the student was enrolled (1=vocational, 2=general, 3=academic) and the score on their final exam in math (column math).
+
+```{r}
+awards_df <- read.table("data/awards.txt", header=TRUE)
+awards_df$prog = as.factor(awards_df$prog)
+head(awards_df)
+```
+```{r}
+hist(awards_df$num_awards)
+```
+
+```{r}
+# awards_df$num_awards = as.factor(awards_df$num_awards)
+```
+
+
+### a)  Investigate whether the type of program influences the number of awards by performing a Poisson regression, without taking variable math into account. Estimate the numbers of awards for all the three types of program. Which program type is the best for the number of awards for this model?
+
+```{r}
+awards_glm = glm(num_awards ~ prog, family=poisson, data=awards_df)
+summary(awards_glm)
+```
+The first two programs (vocational, general) influence the amount of awards while the academic one doesn't.
+
+```{r}
+predict(awards_glm, data.frame(prog="1"), type="response")
+predict(awards_glm, data.frame(prog="2"), type="response")
+predict(awards_glm, data.frame(prog="3"), type="response")
+```
+The general (2) one is the best in terms of awards.
+
+### b)  For the situation in a), can the Kruskall-Wallis test also be used? If yes, apply the test and comment on the results; if no, explain why this test cannot be used.
+
+Assumption about ni>5?
+
+```{r}
+table(awards_df$prog)
+table(awards_df$num_awards)
+```
+
+```{r}
+attach(awards_df)
+kruskal.test(num_awards, prog)
+```
+
+
+### c)  Now include predictor math into analysis and investigate the influence of the explanatory variables prog and math (and their interaction) on the numbers of awards. Which program type is the best for the number of awards? Comments on your findings. Estimate the numbers of awards for the vocational program and math score 55.
+
+```{r}
+awards_glm2=glm(num_awards~prog*math, family=poisson, data=awards_df)
+summary(awards_glm2)
+```
+```{r}
+drop1(awards_glm2, test='Chisq')
+```
+```{r}
+mod2=glm(num_awards~math,family=poisson,data=awards_df); anova(mod2,awards_glm2, test="Chisq")
+```
+
+
+Interactions are insignificant.
+
+```{r}
+awards_glm3 = glm(num_awards~prog+math, family=poisson, data=awards_df)
+summary(awards_glm3)
+```
+All programs now have a significant influence on the amount of awards. Math score is also significant.
+
+```{r}
+predict(awards_glm3, data.frame(prog="1", math=mean(awards_df$math)), type="response")
+predict(awards_glm3, data.frame(prog="2", math=mean(awards_df$math)), type="response")
+predict(awards_glm3, data.frame(prog="3", math=mean(awards_df$math)), type="response")
+```
+The academic group is now better for awards.
+
+```{r}
+predict(awards_glm3, data.frame(prog="1", math=55), type="response")
+```
+
