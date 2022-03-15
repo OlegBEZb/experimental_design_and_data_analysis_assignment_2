@@ -96,6 +96,26 @@ corrplot(res, type = "upper", order = "hclust",
          tl.col = "black", tl.srt = 45)
 pairs(pollution_df, pch = 19)
 ```
+The command order(abs(residuals(model))) gives the indices of the ordered absolute values of residuals from smallest to largest.
+```{r}
+pollution_lm = lm(oxidant~insolation+humidity+wind+temperature+day, data=pollution_df)
+order(abs(residuals(pollution_lm)))
+```
+The mean shift outlier model can be applied to test whether the k-th point significantly deviates from the other points in a linear regression setting.
+```{r}
+u_out=rep(0, nrow(pollution_df)); u_out[21]=1
+pollution_lm_outlier=lm(oxidant~insolation+humidity+wind + u_out, data=pollution_df); summary(pollution_lm_outlier)
+```
+Only the 21 outlier is significant.
+
+The Cook’s distance Di quantifies the influence of observation i on the predictions:
+$D_{i}=\frac{1}{(p+1) \hat{\sigma}^{2}} \sum_{j=1}^{n}\left(\hat{Y}_{(i), j}-\hat{Y}_{j}\right)^{2}$
+
+```{r}
+plot(1:nrow(pollution_df), cooks.distance(pollution_lm), type="b")
+```
+Rule of thumb: if the Cook’s distance for some data point is close to or larger than 1, it is considered to be an influence point. So the point 23 is an influence here.
+
 ```{r}
 if (!require("psych")) install.packages("psych")
 library(psych)
@@ -120,11 +140,10 @@ par(mfrow=c(2, 1))
 avPlots(mod)
 summary(mod)
 ```
-The slopes on the plots reflect the regression coefficients from the original miltiple regression model mod. 
+The slopes on the plots reflect the regression coefficients from the original multiple regression model mod. 
 ```{r}
-attach(pollution_df)
-y = residuals(lm(oxidant~insolation+humidity))
-x = residuals(lm(wind~insolation+humidity))
+y = residuals(lm(pollution_df$oxidant~pollution_df$temperature+pollution_df$insolation+pollution_df$humidity))
+x = residuals(lm(pollution_df$wind~pollution_df$temperature+pollution_df$insolation+pollution_df$humidity))
 plot(x, y, xlab='residual of wind', ylab='residual of oxidant')
 ```
 
@@ -203,3 +222,150 @@ predict(mod, newxdata, interval='prediction', level=0.95)
 predict(mod, newxdata, interval='confidence', level=0.95)
 ```
 
+## Exercise 3. Fruit flies.
+To investigate the effect of sexual activity on longevity of fruit flies, 75 male fruit flies were divided randomly in three groups of 25. The fruit flies in the first group were kept solitary, those in the second were kept together with one virgin female fruit fly per day, and those in the third group were kept together with eight virgin female fruit flies a day. In the data-file three groups are labelled isolated, low and high. The number of days until death (longevity) was measured for all flies. Later, it was decided to measure also the length of their thorax. Add a column loglongevity to the data-frame, containing the logarithm of the number of days until death. *Use this as the response variable in the following*.
+
+```{r}
+flies_df <- read.table("data/fruitflies.txt", header=TRUE)
+flies_df$loglongevity=log(flies_df$longevity)
+head(flies_df)
+```
+```{r}
+par(mfrow=c(1, 2))
+hist(flies_df$longevity)
+hist(flies_df$loglongevity)
+```
+```{r}
+shapiro.test(flies_df$longevity)
+shapiro.test(flies_df$loglongevity)
+```
+The original column is normal while the log of it is not.
+```{r}
+boxplot(longevity~activity, data=flies_df)
+```
+```{r}
+plot(loglongevity~thorax, pch=as.character(activity), data=flies_df)
+```
+
+
+### a)  Make an informative plot of the data. Investigate whether sexual activity influences longevity by performing a statistical test, without taking the thorax length into account. What are the estimated longevities for the three conditions? Comment.
+
+```{r}
+if (!require("dplyr")) install.packages("dplyr")
+library(dplyr)
+
+par(mfrow=c(2, 1))
+res <- cor(select_if(flies_df, is.numeric), method='spearman')
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+pairs(select_if(flies_df, is.numeric), pch = 19)
+```
+```{r}
+flies_df$activity=as.factor(flies_df$activity)
+
+flies_lm = lm(loglongevity ~ activity, data=flies_df)
+anova(flies_lm)
+```
+H0 is rejected. Sexual activity influences longevity.
+
+```{r}
+summary(flies_lm)
+```
+estimated longevities for the three conditions: 
+```{r}
+high = 3.60212
+isolated = high + 0.51722
+low = high + 0.39711
+high; isolated; low
+```
+
+### b)  Investigate whether sexual activity influences longevity by performing a statistical test, now including thorax length as an explanatory variable into the analysis. Does sexual activity increase or decrease longevity? What are the estimated longevities for the three groups, for flies with the minimal and maximal thorax lengths?
+
+```{r}
+ancova_lm = lm(loglongevity ~ activity + thorax, data=flies_df) ## order matters but we use drop so don't care. latter have to be of interest
+drop1(ancova_lm, test="F")
+```
+```{r}
+summary(ancova_lm)
+```
+From the coefficients we can conclude that more sex - shorter life.
+```{r}
+shapiro.test(residuals(ancova_lm))
+```
+
+
+```{r}
+par(mfrow=c(1, 2))
+qqnorm(residuals(ancova_lm)); qqline(residuals(ancova_lm))
+plot(fitted(ancova_lm), residuals(ancova_lm))
+```
+
+
+```{r}
+ancova_lm_int = lm(loglongevity ~ activity * thorax, data=flies_df)
+anova(ancova_lm_int)
+```
+There is no significant interaction between factor activity and predictor thorax.
+
+```{r}
+summary(ancova_lm_int)
+```
+The interaction term is not significant. So, no indication that the initial analysis (ancova_lm without interaction) is in trouble.
+
+```{r}
+# predict(ancova_lm, flies_df[which.min(flies_df$thorax), c('thorax', 'activity')])
+# predict(ancova_lm, flies_df[which.max(flies_df$thorax), c('thorax', 'activity')])
+
+min_thorax = min(flies_df$thorax)
+max_thorax = max(flies_df$thorax)
+
+# min_high = predict(ancova_lm, data.frame(thorax = min_thorax, activity = "high"))
+min_high = 1.21893 + 2.97899 * min_thorax
+max_high = 1.21893 + 2.97899 * max_thorax
+
+min_iso = 1.21893 + 0.40998 + 2.97899 * min_thorax
+max_iso = 1.21893 + 0.40998 + 2.97899 * max_thorax
+
+min_low = 1.21893 + 0.28570 + 2.97899 * min_thorax
+max_low = 1.21893 + 0.28570 + 2.97899 * max_thorax
+
+exp(min_high); exp(max_high)
+exp(min_iso); exp(max_iso)
+exp(min_low); exp(max_low)
+```
+
+### c)  How does thorax length influence longevity? Investigate graphically and by using an appropriate test whether this dependence is similar under all three conditions of sexual activity.
+
+```{r}
+plot(loglongevity~thorax, pch=as.character(activity), data=flies_df)
+for (i in unique(flies_df$activity)) abline(lm(loglongevity~thorax, data=flies_df[flies_df$activity==i,]))
+```
+
+```{r}
+ancova_lm_int = lm(loglongevity ~ activity * thorax, data=flies_df)
+anova(ancova_lm_int)
+```
+Only the last p-value is relevant which always concerns interaction for models with interaction. We conclude from it that $H_0: \beta_1 = \beta_2$ is not rejected, i.e., there is no interaction between factor activity and predictor thorax.
+
+### d)  Which of the two analyses, without or with thorax length, do you prefer? Is one of the analyses wrong?
+
+Both analyses case to the conclusion that sexual activity influences longevity, more sex - shorter life.
+
+### e)  Perform the ancova analysis with the number of days as the response, rather than its logarithm. Was it wise to use the logarithm as response?
+
+```{r}
+ancova_lm = lm(longevity ~ activity + thorax, data=flies_df) ## order matters but we use drop so don't care. latter have to be of interest
+drop1(ancova_lm, test="F")
+```
+
+```{r}
+par(mfrow=c(1, 2))
+qqnorm(residuals(ancova_lm)); qqline(residuals(ancova_lm))
+plot(fitted(ancova_lm), residuals(ancova_lm))
+```
+```{r}
+shapiro.test(residuals(ancova_lm))
+```
+Residuals are normal.
+
+It's wise. For both columns the residuals are normal. If they were not, ANCOVA would not be relevant. For non-log model the residuals look non-homogenious.
