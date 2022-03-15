@@ -369,3 +369,91 @@ shapiro.test(residuals(ancova_lm))
 Residuals are normal.
 
 It's wise. For both columns the residuals are normal. If they were not, ANCOVA would not be relevant. For non-log model the residuals look non-homogenious.
+
+##Exercise 4. Personalized system of instruction
+The data was collected to study the effect of a new teaching method called “personalized system of instruction” (psi), 32 students were randomized to either receive psi or to be taught using the existing method. At the end of the teaching period the success of the teaching method was assessed by giving the students a difficult assignment, which they could pass or not. The average grade of the students were also available for analysis: gpa on a scale of 0–4, with 4 being the best grade.
+
+```{r}
+psi_df <- read.table("data/psi.txt", header=TRUE)
+head(psi_df)
+```
+```{r, fig.width=5,fig.height=3}
+par(mfrow=c(1, 2))
+boxplot(gpa ~ passed, data=psi_df)
+boxplot(gpa ~ psi, data=psi_df)
+```
+```{r}
+xtabs(~psi+passed, data=psi_df)
+```
+```{r}
+is.numeric(psi_df$passed)
+is.numeric(psi_df$gpa)
+```
+
+
+### a)  Fit a logistic regression model with both explanatory variables, perform relevant tests. Does psi work?
+
+```{r}
+psi_glm = glm(passed ~ psi + gpa, data=psi_df, family=binomial)
+summary(psi_glm)
+```
+The R-function glm (generalized linear model) is used instead of lm to create the glm
+object. The option family=binomial overrules the default normal model (which gives
+lm). The 2 explanatory variables are inserted here as numerical.
+
+```{r}
+drop1(psi_glm, test="Chisq")
+```
+
+```{r}
+psi_df$psi = as.factor(psi_df$psi)
+psi_glm2 = glm(passed ~ psi + gpa, data=psi_df, family=binomial)
+drop1(psi_glm2, test="Chisq")
+```
+```{r}
+summary(psi_glm2)$coefficients
+```
+
+psi really works
+
+### b)  Estimate the probability that a student with a gpa equal to 3 who receives psi passes the assignment. Estimate the same probability for a student who does not receive psi. Comment.
+
+
+```{r}
+# Response gives you the numerical result while class gives you the label assigned to that value.
+# exp(-11 + 2.33*1 + 3.06*3)
+predict(psi_glm2, data.frame(psi="1", gpa=3), type="response")
+predict(psi_glm2, data.frame(psi="0", gpa=3), type="response")
+```
+
+
+### c)  Estimate the relative change in odds of passing the assignment rendered by instructing students with psi rather than the standard method (for an arbitrary student). What is the interpretation of this number? Is it dependent on gpa?
+
+With psi: 2.337776. 
+
+```{r}
+psi_glm3 = glm(passed ~ psi * gpa, data=psi_df, family=binomial)
+drop1(psi_glm3, test="Chisq")
+```
+There is no interaction between psi and gpa.
+
+### d)  Propose and perform an alternative method of analysis based on contingency tables. Compare its results to the results of the first approach.
+
+```{r}
+matrix = table(psi_df[, c('psi', 'passed')])
+
+# assumption is not met -> bootstrap
+z=chisq.test(matrix, simulate.p.value=TRUE)
+z
+```
+
+There are no contraindications for the chi-square test. The test concludes that there is a dependence between row and column variables. Fisher is also applicable as the table is 2x2.
+
+```{r}
+fisher.test(matrix)
+```
+Same conclusion. psi and passed are dependent.
+
+e)  Given the way the experiment was conducted, is this second approach wrong? Name both an advantage and a disadvantage of the two approaches, relative to each other.
+
+Assumption for chi-square is not met. In first we can include numeric variable
